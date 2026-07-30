@@ -6,7 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <!-- Varmistaa että origin-Referer lähetetään myös asennetussa PWA-tilassa,
-       jotta URL-rajattu Mapbox-token toimii. Vaikuttaa vain cross-origin-
+       jotta URL-rajattu Mapbox-token toimii satelliittitiilissä. Vaikuttaa
+       vain cross-origin-
        pyyntöihin. Digitransit-avain menee sekä geokoodaukseen että
        HSL-vektoritiiliin transformRequest-otsakkeessa. -->
   <meta name="referrer" content="origin-when-cross-origin" />
@@ -20,10 +21,14 @@
   <link rel="apple-touch-icon" sizes="180x180" href="icon.png" />
   <title>TotalParking</title>
   <!-- Taustakartta: Digitransitin/HSL:n vektorikartta, tyylitiedostot repossa
-       (omakartta_style …). Kartta-SDK on Mapbox GL JS v3, joka renderöi myös
-       tavallisia style-spec v8 -tyylejä. Versio on pinnattu tarkoituksella. -->
-  <link href="https://api.mapbox.com/mapbox-gl-js/v3.27.0/mapbox-gl.css" rel="stylesheet" />
-  <script src="https://api.mapbox.com/mapbox-gl-js/v3.27.0/mapbox-gl.js"></script>
+       (omakartta_style …). Kartta-SDK on MapLibre GL JS (BSD, ei tokenia eikä
+       karttalataus­laskutusta). Versio on pinnattu tarkoituksella: 5.x tarjoaa
+       klassisen UMD-buildin globaalilla `maplibregl`-muuttujalla, kun taas 6.x
+       siirtyi ES-moduuleihin (vaatisi <script type="module"> ja koko sovellus­
+       skriptin uudelleenjärjestelyn). Päivitä 6:een vasta tietoisesti.
+       Mapboxia käytetään enää VAIN satelliittirasterissa (ks. MAPBOX_TOKEN). -->
+  <link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
   <style>
     :root {
@@ -64,8 +69,12 @@
        attribuutio ("© Mapbox © OpenStreetMap") ovat kartalla näkyvissä.
        Nämä kaksi sääntöä piilottavat ne. Poista säännöt (ja map-optioista
        attributionControl:false) ennen kuin sovellus julkaistaan. */
-    .mapboxgl-ctrl-attrib { display: none !important; }
-    .mapboxgl-ctrl { display: none !important; }
+    /* HUOM: attribuutio on piilotettu. MapLibre itse ei vaadi logoa, mutta
+       tietolähteet vaativat maininnan: Digitransit/HSL + OpenStreetMap, ja
+       satelliittinäkymässä "© Mapbox © Maxar". Poista nämä säännöt (ja
+       map-optioista attributionControl:false) ennen julkaisua. */
+    .maplibregl-ctrl-attrib { display: none !important; }
+    .maplibregl-ctrl { display: none !important; }
     /* ── Unified center marker ────────────────────────────────────────
        One element that morphs between two states:
        - Collapsed (default): just the P pin
@@ -210,7 +219,7 @@
 
     /* MapLibre DOM markers (e.g. the red search-result pin) sit below the
        P-marker so they can't peek out from behind it. */
-    .mapboxgl-marker { z-index: 5; }
+    .maplibregl-marker { z-index: 5; }
     
     /* Splash Screen */
     /* (Splash screen removed — app now opens directly to the map.) */
@@ -219,7 +228,7 @@
        MapLibre's native heading cone is hidden; we render our own arrow
        inside the user-location-dot, rotated via JS using DeviceOrientation
        data (after the user grants compass permission on iOS). */
-    .mapboxgl-user-location-dot {
+    .maplibregl-user-location-dot {
       background-color: #1e7cff !important;
       width: 22px !important;
       height: 22px !important;
@@ -228,10 +237,10 @@
       position: relative !important;
     }
     /* Piilotetaan SDK:n oma kartiomainen suuntaosoitin — käytetään omaa nuolta.
-       Mapbox nimeää sen .mapboxgl-user-location-heading, MapLibre nimesi sen
+       Mapbox nimeää sen .maplibregl-user-location-heading, MapLibre nimesi sen
        .maplibregl-user-location-dot-heading → katetaan molemmat nimet. */
-    .mapboxgl-user-location-heading,
-    .mapboxgl-user-location-dot-heading { display: none !important; }
+    .maplibregl-user-location-heading,
+    .maplibregl-user-location-dot-heading { display: none !important; }
     /* Custom direction arrow. Positioned dead-center over the user dot;
        a transform chain rotates first, then translates outward — so the
        arrow's base ends up flush against the dot's edge in the rotated
@@ -259,7 +268,7 @@
       display: none;
       transition: transform 0.12s linear;
     }
-    .mapboxgl-user-location-dot.has-heading .user-dot-arrow {
+    .maplibregl-user-location-dot.has-heading .user-dot-arrow {
       display: block;
     }
     
@@ -5579,7 +5588,7 @@
     // siitä näkee heti onko selaimessa uusin tiedosto vai välimuistiin jäänyt
     // vanha versio. Sama arvo tulee myös konsoliin ja window.TP_BUILDiin.
     const APP_VERSION = '1.0.0';
-    const APP_BUILD   = '2026-07-31-a';
+    const APP_BUILD   = '2026-07-31-b';
     window.TP_BUILD = APP_BUILD;
     console.log('BUILD: ' + APP_VERSION + ' · ' + APP_BUILD);
     (function writeAboutVersion(){
@@ -5771,12 +5780,11 @@
     // Niin kauan kuin arvo on paikkamerkki, satelliittinappi vain vilauttaa
     // ohjeen eikä yritä ladata tiiliä.
     const MAPBOX_TOKEN = 'pk.eyJ1IjoiZWxpYXMxOTk4IiwiYSI6ImNtcm9td3dwMzNlbmQyeHF6OGUzNDc5enYifQ.09UVfLxCbFdL633TWPvNiA';
-    // Token käytetään nyt KOKO taustakarttaan, ei vain satelliittirasteriin.
-    // MUISTA lisätä uuden repon osoite tokenin URL-rajaukseen:
+    // Tokenia tarvitaan enää VAIN satelliittirasteriin (rajausnäkymän
+    // karttatyyppinappi). MapLibrella ei ole accessToken-käsitettä, vaan avain
+    // menee suoraan tiili-URLiin (ks. ensureRasterLayers / mapbox-sat).
+    // MUISTA pitää repon osoite tokenin URL-rajauksessa:
     //   account.mapbox.com -> Tokens -> (token) -> URL restrictions
-    //   https://elias1998-fi.github.io/Oma-kartta-development-/
-    // Ilman sitä Standard-tiilet palauttavat 401 eikä kartta piirry.
-    mapboxgl.accessToken = MAPBOX_TOKEN;
 
     // ── OpenStreetMap-rasteritiilet (karttatyylin "OSM"-tila) ──────────
     // Tämä on OSM:n oma vakiotyyli (sama ulkoasu kuin openstreetmap.org).
@@ -6088,7 +6096,7 @@
         const [latStr, lngStr] = ll.split(',');
         const lat = parseFloat(latStr), lng = parseFloat(lngStr);
         if (isFinite(lat) && isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-          _sharedInitialCenter = [lng, lat]; // mapbox uses [lng, lat]
+          _sharedInitialCenter = [lng, lat]; // MapLibre käyttää [lng, lat]
         }
       }
       const z = parseFloat(params.get('z'));
@@ -6126,22 +6134,11 @@
       return MAP_THEME_DEFAULT;
     })();
 
-    // Kamera on lukittu litteäksi (pitch 0, maxPitch 0, ei kiertoa) ja
-    // projektio pakotettu mercatoriin, koska GL JS v3 käyttäisi muuten globea
-    // pienillä zoomeilla.
+    // Kamera on lukittu litteäksi: pitch 0, maxPitch 0, ei kiertoa.
 
-    // ── *-emissive-strength ───────────────────────────────────────────
-    // Ominaisuus vaikuttaa vain jos tyylissä on 3D-valaistus (lights-lohko).
-    // HSL-tyyleissä sellaista ei ole, joten arvolla ei ole nyt merkitystä.
-    // Pidetään silti paikallaan: se on kelvollinen Mapbox GL JS -arvo eikä
-    // haittaa, ja on välttämätön jos tyyliksi joskus vaihdetaan valaistu tyyli
-    // (silloin oletus 0 tummentaisi omat tasot).
-    const TP_EMISSIVE = 1;
-    const map = new mapboxgl.Map({
+    const map = new maplibregl.Map({
       container: 'map',
-      accessToken: MAPBOX_TOKEN,
       style: styleUrl(mapThemeChoice),
-      projection: 'mercator',
       center: _sharedInitialCenter || [24.932096, 60.167370],
       zoom:   _sharedInitialZoom   || 16,
       minZoom: 5, maxZoom: 20,
@@ -6349,7 +6346,7 @@
     // trackUserLocation:false → does not continuously follow the device.
     // We also do NOT auto-trigger on map load; the user must press the
     // location button (top-right) to fetch their current position.
-    const geolocate = new mapboxgl.GeolocateControl({
+    const geolocate = new maplibregl.GeolocateControl({
       positionOptions: { enableHighAccuracy: true },
       trackUserLocation: false,
       showUserHeading: true
@@ -6444,7 +6441,7 @@
       // Käsittele kaikki sijaintipisteet: perusnäkymän (GeolocateControl) sekä
       // hyväksymisnäkymän oma piste (ensureAdminUserDot), jotta suuntanuoli
       // näkyy molemmissa.
-      const dots = document.querySelectorAll('.mapboxgl-user-location-dot');
+      const dots = document.querySelectorAll('.maplibregl-user-location-dot');
       if (!dots.length) return false;
       dots.forEach(dot => {
         if (!dot.querySelector('.user-dot-arrow')) {
@@ -6463,7 +6460,7 @@
       // Order matters: center-then-rotate-then-push-outward. Result: the
       // triangle orbits around the dot's center, base on the dot's edge,
       // tip pointing away in the direction of the compass heading.
-      document.querySelectorAll('.mapboxgl-user-location-dot .user-dot-arrow').forEach(arrow => {
+      document.querySelectorAll('.maplibregl-user-location-dot .user-dot-arrow').forEach(arrow => {
         arrow.style.transform =
           `translate(-50%, -50%) rotate(${_currentHeading}deg) translateY(-22px)`;
       });
@@ -6787,10 +6784,10 @@
       const before = areaMap.getLayer('area-poly-fill') ? 'area-poly-fill' : undefined;
       if (!areaMap.getLayer('existing-areas-fill'))
         areaMap.addLayer({ id:'existing-areas-fill', type:'fill', source:'existing-areas',
-          paint:{ 'fill-emissive-strength': TP_EMISSIVE, 'fill-opacity':0.15, 'fill-color':'#0C0243' } }, before);   // harmaa täyttö kuten muokattava polygoni
+          paint:{ 'fill-opacity':0.15, 'fill-color':'#0C0243' } }, before);   // harmaa täyttö kuten muokattava polygoni
       if (!areaMap.getLayer('existing-areas-line'))
         areaMap.addLayer({ id:'existing-areas-line', type:'line', source:'existing-areas',
-          paint:{ 'line-emissive-strength': TP_EMISSIVE, 'line-width':1.0, 'line-opacity':0.6, 'line-color':'#000' } }, before);   // ohut musta reuna (kuten perusnäkymän pysäköintipolygonit)
+          paint:{ 'line-width':1.0, 'line-opacity':0.6, 'line-color':'#000' } }, before);   // ohut musta reuna (kuten perusnäkymän pysäköintipolygonit)
     }
     function addPolygonLayers() {
       if (!areaMap) return;
@@ -6801,9 +6798,9 @@
         areaMap.getSource('area-poly').setData(getAreaGeoJSON());
       }
       if (!areaMap.getLayer('area-poly-fill'))
-        areaMap.addLayer({ id:'area-poly-fill', type:'fill', source:'area-poly', paint:{ 'fill-emissive-strength': TP_EMISSIVE,'fill-color':'#f39c12','fill-opacity':0.18} });
+        areaMap.addLayer({ id:'area-poly-fill', type:'fill', source:'area-poly', paint:{ 'fill-color':'#f39c12','fill-opacity':0.18} });
       if (!areaMap.getLayer('area-poly-line'))
-        areaMap.addLayer({ id:'area-poly-line', type:'line', source:'area-poly', paint:{ 'line-emissive-strength': TP_EMISSIVE,'line-color':'#e67e22','line-width':2.5,'line-opacity':0.95} });
+        areaMap.addLayer({ id:'area-poly-line', type:'line', source:'area-poly', paint:{ 'line-color':'#e67e22','line-width':2.5,'line-opacity':0.95} });
       applyMapType();   // varmistaa OSM/satelliitti-tasot ja näyttää oikean nykyisen tilan mukaan
     }
 
@@ -6918,7 +6915,7 @@
       areaMarkers.forEach(m=>m.remove()); areaMarkers=[]; lockedPixelPos=[];
       areaCoords = coords.map(c=>[c[0],c[1]]);
       areaCoords.forEach(c=>{
-        const marker=new mapboxgl.Marker({element:createCornerEl(),draggable:true,anchor:'center'}).setLngLat(c).addTo(areaMap);
+        const marker=new maplibregl.Marker({element:createCornerEl(),draggable:true,anchor:'center'}).setLngLat(c).addTo(areaMap);
         setupMarkerEvents(marker); areaMarkers.push(marker);
         if(!areaLocked)lockedPixelPos.push(clampPixelPos(areaMap.project([c[0],c[1]])));
       });
@@ -7021,7 +7018,7 @@
       if (!areaMap || areaCoords.length < 3) return;
       // Siirtokahva (koko polygonin siirto) — polygonin KESKIPISTEESSÄ.
       // Sivukahvat pysyvät poistettuina; kulmapisteet toimivat normaalisti.
-      const ch = new mapboxgl.Marker({element:createCenterHandleEl(), draggable:true, anchor:'center'}).setLngLat(_areaCentroid()).addTo(areaMap);
+      const ch = new maplibregl.Marker({element:createCenterHandleEl(), draggable:true, anchor:'center'}).setLngLat(_areaCentroid()).addTo(areaMap);
       let cS=null, cSC=null;
       ch.on('dragstart', () => { pushAreaUndo(); cS=ch.getLngLat(); cSC=areaCoords.map(c=>[c[0],c[1]]); });
       ch.on('drag', () => {
@@ -7280,7 +7277,7 @@
         const next=areaCoords[(i+1)%n];
         const mid=[(coord[0]+next[0])/2,(coord[1]+next[1])/2];
         const el=createMidpointEl();
-        const marker=new mapboxgl.Marker({element:el,anchor:'center',draggable:false}).setLngLat(mid).addTo(areaMap);
+        const marker=new maplibregl.Marker({element:el,anchor:'center',draggable:false}).setLngLat(mid).addTo(areaMap);
         el.addEventListener('click',()=>{ insertCornerAt(i+1,mid); exitAddMode(); });
         midpointMarkers.push(marker);
       });
@@ -7292,7 +7289,7 @@
       areaCoords.splice(idx,0,coord);
       areaMarkers.forEach(m=>m.remove()); areaMarkers=[]; lockedPixelPos=[];
       areaCoords.forEach(c=>{
-        const marker=new mapboxgl.Marker({element:createCornerEl(),draggable:true,anchor:'center'}).setLngLat(c).addTo(areaMap);
+        const marker=new maplibregl.Marker({element:createCornerEl(),draggable:true,anchor:'center'}).setLngLat(c).addTo(areaMap);
         setupMarkerEvents(marker); areaMarkers.push(marker);
         if(!areaLocked)lockedPixelPos.push(clampPixelPos(areaMap.project([c[0],c[1]])));
       });
@@ -7312,7 +7309,7 @@
       if(!areaMap||areaCoords.length<3)return;
       clearMidpointHandles(); exitRemoveMode();
       const lngs=areaCoords.map(c=>c[0]), lats=areaCoords.map(c=>c[1]);
-      const bounds=new mapboxgl.LngLatBounds([Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]);
+      const bounds=new maplibregl.LngLatBounds([Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]);
       areaMap.fitBounds(bounds,{padding:80,duration:500,maxZoom:19});
     }
 
@@ -7361,7 +7358,7 @@
       areaCoords=[[c.lng-off,c.lat+off],[c.lng+off,c.lat+off],[c.lng+off,c.lat-off],[c.lng-off,c.lat-off]];
       addPolygonLayers();
       areaCoords.forEach(coord=>{
-        const marker=new mapboxgl.Marker({element:createCornerEl(),draggable:true,anchor:'center'}).setLngLat(coord).addTo(areaMap);
+        const marker=new maplibregl.Marker({element:createCornerEl(),draggable:true,anchor:'center'}).setLngLat(coord).addTo(areaMap);
         setupMarkerEvents(marker); areaMarkers.push(marker);
       });
       updateMinusBtn(); updateAddBtn();
@@ -7374,7 +7371,7 @@
         _adminEditPreloadCoords = null;
         addPolygonLayers();
         areaCoords.forEach(coord=>{
-          const marker=new mapboxgl.Marker({element:createCornerEl(),draggable:true,anchor:'center'}).setLngLat(coord).addTo(areaMap);
+          const marker=new maplibregl.Marker({element:createCornerEl(),draggable:true,anchor:'center'}).setLngLat(coord).addTo(areaMap);
           setupMarkerEvents(marker); areaMarkers.push(marker);
         });
         updateMinusBtn(); updateAddBtn(); capturePolyPixels();
@@ -7411,8 +7408,8 @@
       areaMapType = 0; mapTypePending = false; updateMapTypeBtn();
       resetAreaMapLock();
       if(!areaMap){
-        areaMap=new mapboxgl.Map({
-          container:'area-map', accessToken:MAPBOX_TOKEN, style:styleUrl(mapThemeChoice), projection:'mercator',
+        areaMap=new maplibregl.Map({
+          container:'area-map', style:styleUrl(mapThemeChoice),
           pitch:0, maxPitch:0,
           center:[center.lng,center.lat], zoom,
           minZoom:5, maxZoom:20, transformRequest,
@@ -7506,9 +7503,14 @@
         });
       }
       if (!areaMap.getLayer('osm-raster')) {
-        areaMap.addLayer({ id:'osm-raster', paint:{ 'raster-emissive-strength': TP_EMISSIVE }, type:'raster', source:'osm-raster', layout:{ visibility:'none' } }, beforeId);
+        areaMap.addLayer({ id:'osm-raster', type:'raster', source:'osm-raster', layout:{ visibility:'none' } }, beforeId);
       }
-      // Satelliitti (Mapbox) — vain jos token on asetettu.
+      // Satelliitti (Mapbox) — ainoa jäljellä oleva Mapbox-riippuvuus.
+      // Tavallinen raster-lähde HTTPS-tiili-URLilla, joten se toimii
+      // MapLibrella sellaisenaan; avain menee URLin access_token-parametriin.
+      // HUOM: Mapboxin käyttöehdot rajoittavat tiilien käyttöä muiden kuin
+      // Mapboxin omien renderöijien kanssa — tarkista ehdot ennen julkaisua.
+      // Suomessa vaihtoehto on Maanmittauslaitoksen ortokuva-WMTS.
       if (MAPBOX_TOKEN && MAPBOX_TOKEN.indexOf('TÄHÄN') === -1) {
         if (!areaMap.getSource('mapbox-sat')) {
           areaMap.addSource('mapbox-sat', {
@@ -7518,7 +7520,7 @@
           });
         }
         if (!areaMap.getLayer('mapbox-sat')) {
-          areaMap.addLayer({ id:'mapbox-sat', paint:{ 'raster-emissive-strength': TP_EMISSIVE }, type:'raster', source:'mapbox-sat', layout:{ visibility:'none' } }, beforeId);
+          areaMap.addLayer({ id:'mapbox-sat', type:'raster', source:'mapbox-sat', layout:{ visibility:'none' } }, beforeId);
         }
       }
       hookAreaSat();
@@ -8303,7 +8305,7 @@
       if (ct) ct.textContent = rows.length + ' kpl alueita odottaa hyväksyntää';
     }
     // Oman sijainnin piste hyväksymisnäkymän kartalle — sama sininen piste (+
-    // suuntanuoli) kuin perusnäkymässä. Sama .mapboxgl-user-location-dot
+    // suuntanuoli) kuin perusnäkymässä. Sama .maplibregl-user-location-dot
     // -tyyli; piste pysyy sijainnissa vaikka karttaa siirretään alueeseen.
     let _adminUserDotMarker = null;
     function ensureAdminUserDot() {
@@ -8312,12 +8314,12 @@
       const lngLat = [userLocation.lon, userLocation.lat];
       if (!_adminUserDotMarker) {
         const el = document.createElement('div');
-        el.className = 'mapboxgl-user-location-dot';
+        el.className = 'maplibregl-user-location-dot';
         const arrow = document.createElement('div');
         arrow.className = 'user-dot-arrow';
         el.appendChild(arrow);
         if (_compassEnabled) el.classList.add('has-heading');
-        _adminUserDotMarker = new mapboxgl.Marker({ element: el, anchor: 'center' }).setLngLat(lngLat).addTo(adminPreviewMap);
+        _adminUserDotMarker = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(lngLat).addTo(adminPreviewMap);
         if (_currentHeading != null && typeof applyHeadingToUserDot === 'function') applyHeadingToUserDot();
       } else {
         _adminUserDotMarker.setLngLat(lngLat);
@@ -8486,9 +8488,9 @@
       if (!adminPreviewMap) {
         const _ac = (typeof userLocation !== 'undefined' && userLocation) ? [userLocation.lon, userLocation.lat] : [24.9354, 60.1699];
         const _az = (typeof userLocation !== 'undefined' && userLocation) ? 16 : 14;
-        adminPreviewMap = new mapboxgl.Map({
-          container: 'admin-preview-map', accessToken: MAPBOX_TOKEN,
-          style: styleUrl(mapThemeChoice), projection: 'mercator',
+        adminPreviewMap = new maplibregl.Map({
+          container: 'admin-preview-map',
+          style: styleUrl(mapThemeChoice),
           pitch: 0, maxPitch: 0,
           center: _ac, zoom: _az,
           dragRotate: false, touchPitch: false, pitchWithRotate: false,
@@ -8540,9 +8542,9 @@
       adminPreviewMap.addSource('admin-master', { type:'geojson', data: fc });
       const before = adminPreviewMap.getLayer('admin-sub-fill') ? 'admin-sub-fill' : undefined;
       adminPreviewMap.addLayer({ id:'admin-master-fill', type:'fill', source:'admin-master',
-        paint:{ 'fill-emissive-strength': TP_EMISSIVE, 'fill-opacity':0.15, 'fill-color':'#0C0243' } }, before);   // harmaa täyttö kuten muokattava polygoni
+        paint:{ 'fill-opacity':0.15, 'fill-color':'#0C0243' } }, before);   // harmaa täyttö kuten muokattava polygoni
       adminPreviewMap.addLayer({ id:'admin-master-line', type:'line', source:'admin-master',
-        paint:{ 'line-emissive-strength': TP_EMISSIVE, 'line-width':1.0, 'line-opacity':0.6, 'line-color':'#000' } }, before);   // ohut musta reuna (kuten perusnäkymän pysäköintipolygonit)
+        paint:{ 'line-width':1.0, 'line-opacity':0.6, 'line-color':'#000' } }, before);   // ohut musta reuna (kuten perusnäkymän pysäköintipolygonit)
     }
     function adminSetAreas(fc) {
       ['admin-sub-fill','admin-sub-line'].forEach(id => { if (adminPreviewMap.getLayer(id)) adminPreviewMap.removeLayer(id); });
@@ -8550,9 +8552,9 @@
       if (!fc.features.length) return;
       adminPreviewMap.addSource('admin-sub', { type:'geojson', data: fc });
       adminPreviewMap.addLayer({ id:'admin-sub-fill', type:'fill', source:'admin-sub',
-        paint:{ 'fill-emissive-strength': TP_EMISSIVE,'fill-color':'#f39c12','fill-opacity':0.35} });
+        paint:{ 'fill-color':'#f39c12','fill-opacity':0.35} });
       adminPreviewMap.addLayer({ id:'admin-sub-line', type:'line', source:'admin-sub',
-        paint:{ 'line-emissive-strength': TP_EMISSIVE,'line-color':'#e67e22','line-width':3,'line-opacity':1} });
+        paint:{ 'line-color':'#e67e22','line-width':3,'line-opacity':1} });
     }
 
     function adminFitTo(fc) {
@@ -9249,8 +9251,7 @@
         //    kapenee 2 px:iin lähellä -> täytön alle jäävä puolikas peittyy ja
         //    näkyviin jää täsmälleen 1 px musta reunaviiva.
         map.addLayer({ id:'master-poly-line', type:'line', source:'master-polygons', minzoom:13,
-          paint:{ 'line-emissive-strength': TP_EMISSIVE,
-            'line-width': RIM_WIDTH, 'line-color': '#000000',
+          paint:{             'line-width': RIM_WIDTH, 'line-color': '#000000',
             'line-opacity': hlOpacity('baseLine'),
             'line-opacity-transition': { duration: FOCUS.ms },
             'line-color-transition': { duration: FOCUS.ms }
@@ -9261,8 +9262,7 @@
         //    kaukaa näkyvän värillisen pillerin; kutistuu nollaan zoomilla 18,
         //    jolloin täyttö hoitaa värin yksin.
         map.addLayer({ id:'master-poly-boost', type:'line', source:'master-polygons', minzoom:13,
-          paint:{ 'line-emissive-strength': TP_EMISSIVE,
-            'line-width': BOOST_WIDTH, 'line-color': AREA_FILL_EXPR,
+          paint:{             'line-width': BOOST_WIDTH, 'line-color': AREA_FILL_EXPR,
             'line-opacity': hlOpacity('boost'),
             'line-opacity-transition': { duration: FOCUS.ms },
             'line-color-transition': { duration: FOCUS.ms }
@@ -9271,8 +9271,7 @@
         });
         // 3) Varsinainen täyttö
         map.addLayer({ id:'master-poly-fill', type:'fill', source:'master-polygons', minzoom:13,
-          paint:{ 'fill-emissive-strength': TP_EMISSIVE,
-            'fill-opacity': hlOpacity('baseFill'),
+          paint:{             'fill-opacity': hlOpacity('baseFill'),
             'fill-opacity-transition': { duration: FOCUS.ms },
             'fill-color': AREA_FILL_EXPR,
             'fill-color-transition': { duration: FOCUS.ms }
@@ -9284,8 +9283,7 @@
         //    mitään sen alta -> reuna on täsmälleen yhtä paksu kuin muiden
         //    alueiden musta reunaviiva.
         map.addLayer({ id:'master-poly-sel-line', type:'line', source:'master-polygons', minzoom:13,
-          paint:{ 'line-emissive-strength': TP_EMISSIVE,
-            'line-width': SEL_WIDTH, 'line-color': FOCUS.hoverColor,
+          paint:{             'line-width': SEL_WIDTH, 'line-color': FOCUS.hoverColor,
             'line-opacity': hlOpacity('selLine'),
             'line-opacity-transition': { duration: FOCUS.ms }
           },
@@ -9573,8 +9571,7 @@
         }
         map.addLayer({ id: DIM_LAYER, type:'fill', source:'tp-dim',
           paint:{
-            'fill-emissive-strength': TP_EMISSIVE,
-            'fill-color': dimColorFor(),
+                        'fill-color': dimColorFor(),
             'fill-opacity': 0,
             'fill-opacity-transition': { duration: FOCUS.ms }
           }
@@ -10440,8 +10437,8 @@
     }
     async function initEditorMap() {
       if (!editorMap) {
-        editorMap = new mapboxgl.Map({
-          container:'editor-map', accessToken:MAPBOX_TOKEN, style:styleUrl(mapThemeChoice), projection:'mercator',
+        editorMap = new maplibregl.Map({
+          container:'editor-map', style:styleUrl(mapThemeChoice),
           pitch:0, maxPitch:0,
           center:map.getCenter(), zoom:map.getZoom(),
           minZoom:5, maxZoom:20, transformRequest,
@@ -10505,7 +10502,7 @@
       } else {
         editorMap.addSource('editor-all', { type:'geojson', data: geojson });
         editorMap.addLayer({ id:'editor-fill', type:'fill', source:'editor-all', minzoom:13,
-          paint:{ 'fill-emissive-strength': TP_EMISSIVE, 'fill-opacity':1,
+          paint:{ 'fill-opacity':1,
             'fill-color': ['match', ['get','source'],
               'community',          '#7ac66d',
               'hel_ilmainen_pitka', '#7ac66d',
@@ -10516,31 +10513,31 @@
           }
         });
         editorMap.addLayer({ id:'editor-line', type:'line', source:'editor-all', minzoom:13,
-          paint:{ 'line-emissive-strength': TP_EMISSIVE, 'line-width':1, 'line-color':'#000000'
+          paint:{ 'line-width':1, 'line-color':'#000000'
           }
         });
         editorMap.addLayer({ id:'editor-sel-fill', type:'fill', source:'editor-all', minzoom:13,
-          paint:{ 'fill-emissive-strength': TP_EMISSIVE, 'fill-color':'#0C0243','fill-opacity':0.6 },
+          paint:{ 'fill-color':'#0C0243','fill-opacity':0.6 },
           filter:['in',['get','id'],['literal',[]]] });
         editorMap.addLayer({ id:'editor-sel-line', type:'line', source:'editor-all', minzoom:13,
-          paint:{ 'line-emissive-strength': TP_EMISSIVE, 'line-color':'#0C0243','line-width':2.5 },
+          paint:{ 'line-color':'#0C0243','line-width':2.5 },
           filter:['in',['get','id'],['literal',[]]] });
         // Preview layer
         editorMap.addSource('editor-preview', { type:'geojson', data:{ type:'FeatureCollection', features:[] } });
         editorMap.addLayer({ id:'editor-preview-fill', type:'fill', source:'editor-preview',
-          paint:{ 'fill-emissive-strength': TP_EMISSIVE, 'fill-color':'#FFD600','fill-opacity':0.55 } });
+          paint:{ 'fill-color':'#FFD600','fill-opacity':0.55 } });
         editorMap.addLayer({ id:'editor-preview-line', type:'line', source:'editor-preview',
-          paint:{ 'line-emissive-strength': TP_EMISSIVE, 'line-color':'#F9A825','line-width':3 } });
+          paint:{ 'line-color':'#F9A825','line-width':3 } });
         // Delete highlight
         editorMap.addLayer({ id:'editor-del-fill', type:'fill', source:'editor-all', minzoom:13,
-          paint:{ 'fill-emissive-strength': TP_EMISSIVE, 'fill-color':'#e53935','fill-opacity':0.6 },
+          paint:{ 'fill-color':'#e53935','fill-opacity':0.6 },
           filter:['==','id','__none__'] });
         // Reject flash (incompatible area blink)
         editorMap.addLayer({ id:'editor-reject-fill', type:'fill', source:'editor-all', minzoom:13,
-          paint:{ 'fill-emissive-strength': TP_EMISSIVE, 'fill-color':'#e53935','fill-opacity':0.75 },
+          paint:{ 'fill-color':'#e53935','fill-opacity':0.75 },
           filter:['==','id','__none__'] });
         editorMap.addLayer({ id:'editor-reject-line', type:'line', source:'editor-all', minzoom:13,
-          paint:{ 'line-emissive-strength': TP_EMISSIVE, 'line-color':'#e53935','line-width':3 },
+          paint:{ 'line-color':'#e53935','line-width':3 },
           filter:['==','id','__none__'] });
       }
       updateEditorUI();
@@ -12419,12 +12416,12 @@
         const el = document.createElement('img');
         el.src = (typeof chargingIconSvg === 'function') ? chargingIconSvg('#008151') : '';
         el.style.cssText = 'width:30px;height:30px;display:block;';
-        _locEditOrigMarker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+        _locEditOrigMarker = new maplibregl.Marker({ element: el, anchor: 'center' })
           .setLngLat([center.lng, center.lat]).addTo(locEditMap);
       };
       if (!locEditMap) {
-        locEditMap = new mapboxgl.Map({
-          container: 'loc-edit-map', accessToken: MAPBOX_TOKEN, style: styleUrl(mapThemeChoice), projection: 'mercator',
+        locEditMap = new maplibregl.Map({
+          container: 'loc-edit-map', style: styleUrl(mapThemeChoice),
           pitch: 0, maxPitch: 0,
           center: [center.lng, center.lat], zoom: zoom,
           minZoom: 5, maxZoom: 20, transformRequest,
@@ -12457,7 +12454,7 @@
         const el = document.createElement('img');
         el.src = (typeof chargingIconSvg === 'function') ? chargingIconSvg('#ff8c00') : '';
         el.style.cssText = 'width:34px;height:34px;display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4));';
-        _locEditNewMarker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+        _locEditNewMarker = new maplibregl.Marker({ element: el, anchor: 'center' })
           .setLngLat([c.lng, c.lat]).addTo(locEditMap);
         const pin = document.getElementById('loc-edit-center-pin');
         if (pin) pin.style.display = 'none';
@@ -13049,7 +13046,7 @@
       const onMoveEnd = () => {
         map.off('moveend', onMoveEnd);
         const markerElement = createPinElement();
-        currentMarker = new mapboxgl.Marker({
+        currentMarker = new maplibregl.Marker({
           element: markerElement,
           anchor: 'bottom'
         })
@@ -17313,7 +17310,7 @@
           <ellipse cx="12" cy="33" rx="2" ry="1.5" fill="#333" opacity="0.4"/>
         </svg>`;
       outer.appendChild(inner);
-      _destinationPinMarker = new mapboxgl.Marker({ element: outer, anchor: 'bottom' })
+      _destinationPinMarker = new maplibregl.Marker({ element: outer, anchor: 'bottom' })
         .setLngLat([lng, lat])
         .addTo(map);
       _destinationCoords = { lat, lng };
