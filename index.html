@@ -5588,7 +5588,7 @@
     // siitä näkee heti onko selaimessa uusin tiedosto vai välimuistiin jäänyt
     // vanha versio. Sama arvo tulee myös konsoliin ja window.TP_BUILDiin.
     const APP_VERSION = '1.0.0';
-    const APP_BUILD   = '2026-07-31-c';
+    const APP_BUILD   = '2026-07-31-d';
     window.TP_BUILD = APP_BUILD;
     console.log('BUILD: ' + APP_VERSION + ' · ' + APP_BUILD);
     (function writeAboutVersion(){
@@ -6144,6 +6144,12 @@
       minZoom: 5, maxZoom: 20,
       pitch: 0, maxPitch: 0, bearing: 0,
       transformRequest, maxTileCacheSize: 50, fadeDuration: 100,
+      // MSAA päälle. MapLibre GL JS:n oletus on false (suorituskykysyistä), kun
+      // taas MapLibre Native piirtää tyypillisesti MSAA:n kanssa. Tämä on se
+      // renderöijätason ero joka näkyy vinojen reunojen — esimerkiksi
+      // rakennusten kulmien — pehmeytenä selaimessa. Jos ruudunpäivitys
+      // kärsii vanhoilla laitteilla, tämän voi ottaa pois.
+      antialias: true,
       dragRotate: false, touchPitch: false, pitchWithRotate: false,
       keyboard: false, attributionControl: false, doubleClickZoom: false
     });
@@ -7417,7 +7423,7 @@
           container:'area-map', style:styleUrl(mapThemeChoice),
           pitch:0, maxPitch:0,
           center:[center.lng,center.lat], zoom,
-          minZoom:5, maxZoom:20, transformRequest,
+          minZoom:5, maxZoom:20, transformRequest, antialias:true,
           dragRotate:false, touchPitch:false, pitchWithRotate:false,
           keyboard:false, attributionControl:false, doubleClickZoom:false
         });
@@ -8498,7 +8504,7 @@
           style: styleUrl(mapThemeChoice),
           pitch: 0, maxPitch: 0,
           center: _ac, zoom: _az,
-          dragRotate: false, touchPitch: false, pitchWithRotate: false,
+          dragRotate: false, touchPitch: false, pitchWithRotate: false, antialias: true,
           keyboard: false, attributionControl: false, transformRequest, doubleClickZoom: false
         });
         adminPreviewMap.on('load', () => {
@@ -10513,7 +10519,7 @@
           container:'editor-map', style:styleUrl(mapThemeChoice),
           pitch:0, maxPitch:0,
           center:map.getCenter(), zoom:map.getZoom(),
-          minZoom:5, maxZoom:20, transformRequest,
+          minZoom:5, maxZoom:20, transformRequest, antialias:true,
           dragRotate:false, attributionControl:false, doubleClickZoom:false
         });
         editorMap.on('load', async () => {
@@ -12496,7 +12502,7 @@
           container: 'loc-edit-map', style: styleUrl(mapThemeChoice),
           pitch: 0, maxPitch: 0,
           center: [center.lng, center.lat], zoom: zoom,
-          minZoom: 5, maxZoom: 20, transformRequest,
+          minZoom: 5, maxZoom: 20, transformRequest, antialias: true,
           dragRotate: false, attributionControl: false, doubleClickZoom: false
         });
         locEditMap.on('load', () => {
