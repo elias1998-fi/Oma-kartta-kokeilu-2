@@ -5588,7 +5588,7 @@
     // siitä näkee heti onko selaimessa uusin tiedosto vai välimuistiin jäänyt
     // vanha versio. Sama arvo tulee myös konsoliin ja window.TP_BUILDiin.
     const APP_VERSION = '1.0.0';
-    const APP_BUILD   = '2026-07-31-b';
+    const APP_BUILD   = '2026-07-31-c';
     window.TP_BUILD = APP_BUILD;
     console.log('BUILD: ' + APP_VERSION + ' · ' + APP_BUILD);
     (function writeAboutVersion(){
@@ -6148,7 +6148,12 @@
       keyboard: false, attributionControl: false, doubleClickZoom: false
     });
     map.touchZoomRotate.disableRotation();
-    map.on('style.load', () => { try { applyFocusPaint(); } catch(e){} });
+    // Tyyli käydään läpi heti kun se on valmis — myös teeman vaihdon jälkeen,
+    // koska setStyle korvaa tasot kokonaan.
+    map.on('style.load', () => {
+      try { scanStyleLayers(); } catch(e){ console.warn('scanStyleLayers', e); }
+      try { applyFocusPaint(); } catch(e){}
+    });
 
     // moveLayer voi heittää slot-tasoilla, ja slotit takaavat järjestyksen jo
     // itsessään (ikonit 'top', pysäköintialueet 'middle'), joten siirto on vain
@@ -9257,7 +9262,7 @@
             'line-color-transition': { duration: FOCUS.ms }
           },
           layout:{ 'line-join':'round', 'line-cap':'round' }
-        });
+        }, labelsBeforeId());
         // 2) ALUEEN OMANVÄRINEN PAKSUNNUSVIIVA. Tekee ohuesta kadunvarsialueesta
         //    kaukaa näkyvän värillisen pillerin; kutistuu nollaan zoomilla 18,
         //    jolloin täyttö hoitaa värin yksin.
@@ -9268,7 +9273,7 @@
             'line-color-transition': { duration: FOCUS.ms }
           },
           layout:{ 'line-join':'round', 'line-cap':'round' }
-        });
+        }, labelsBeforeId());
         // 3) Varsinainen täyttö
         map.addLayer({ id:'master-poly-fill', type:'fill', source:'master-polygons', minzoom:13,
           paint:{             'fill-opacity': hlOpacity('baseFill'),
@@ -9276,7 +9281,7 @@
             'fill-color': AREA_FILL_EXPR,
             'fill-color-transition': { duration: FOCUS.ms }
           }
-        });
+        }, labelsBeforeId());
         // 4) VALITUN ALUEEN punainen reunaviiva, täytön PÄÄLLÄ. Näkyy vain
         //    korostustilassa (line-opacity), leveys riippuu vain zoomista.
         //    Koska se on täytön päällä, 50 % punainen täyttö ei voi paljastaa
@@ -9288,7 +9293,7 @@
             'line-opacity-transition': { duration: FOCUS.ms }
           },
           layout:{ 'line-join':'round', 'line-cap':'round' }
-        });
+        }, labelsBeforeId());
         // Apply current filter state (free areas hidden by default until enabled)
         applyRangeFilter();
 
@@ -9420,6 +9425,7 @@
       hoverFillColor: 'rgba(255, 23, 68, 0.5)', // valitun alueen täyttö, 50 %
       dimBlend:       0.70,                     // taka-alan väri: 70 % kohti teeman sävyä
       dimIcon:        0.25,                     // halli-/latauspisteikonit taka-alalle
+      dimPoi:         0.30,                     // tyylin omat tekstit taka-alalle
       scrim:          0.40                      // taustakartan himmennys
     };
     // MIKSI TAKA-ALA HIMMENNETÄÄN VÄRILLÄ EIKÄ LÄPINÄKYVYYDELLÄ
@@ -9552,9 +9558,9 @@
 
     // ── Taustakartan himmennysverho ───────────────────────────────────
     // Koko näkymän peittävä polygoni pysäköintialueiden ALLE. Korostustilassa
-    // sen läpinäkyvyys nousee, jolloin taustakartta jää taka-alalle. Tavallisen
-    // tyylin päälle lisättynä verho peittää myös tyylin omat tekstit, joten
-    // kadun- ja paikannimet himmenevät sen mukana.
+    // sen läpinäkyvyys nousee, jolloin taustakartta jää taka-alalle. Verho on
+    // tyylin tekstien ALAPUOLELLA, joten tekstit himmennetään erikseen
+    // (ks. applyFocusPaint / styleLabelLayers).
     const DIM_LAYER = 'map-dim';
     function dimColorFor(){
       // Tummalla tyylillä tummennetaan, vaaleilla haalistetaan valkoisella.
@@ -9571,12 +9577,65 @@
         }
         map.addLayer({ id: DIM_LAYER, type:'fill', source:'tp-dim',
           paint:{
-                        'fill-color': dimColorFor(),
+            'fill-color': dimColorFor(),
             'fill-opacity': 0,
             'fill-opacity-transition': { duration: FOCUS.ms }
           }
-        });
+        }, labelsBeforeId());
       } catch(e){ console.warn('himmennysverhon lisäys epäonnistui:', e); }
+    }
+    // ── Tyylin omat tekstitasot ───────────────────────────────────────
+    // POI-tekstit ja kadunnimet tulevat HSL-tyylitiedostosta, joten niitä ei
+    // voi määritellä täällä. Sen sijaan tyyli käydään läpi kun se on latautunut:
+    //   1) POI-tekstitasot värjätään POI_LABEL_COLORilla
+    //   2) kaikkien tekstitasojen id:t otetaan talteen, jotta ne voidaan
+    //      himmentää korostustilassa (applyFocusPaint)
+    //   3) ensimmäisen TEKSTIÄ sisältävän tason id jää muistiin, ja omat
+    //      pysäköintialuetasot lisätään SEN ALLE -> tyylin tekstit piirtyvät
+    //      alueiden päälle, mutta halli- ja latauspisteikonit lisätään ilman
+    //      beforeId:tä eli kaiken päälle.
+    //
+    // POI-tason tunnistus on nimeen perustuva heuristiikka, koska tyylitiedosto
+    // ei ole tämän tiedoston hallinnassa. Osumat kirjoitetaan konsoliin
+    // ('TotalParking: POI-tekstitasot …') — tarkista sieltä, ja säädä
+    // POI_LAYER_TEST-lauseketta jos se osuu väärin tai ohittaa jotain.
+    const POI_LABEL_COLOR = '#e6bb62';
+    const POI_LAYER_TEST  = /poi|pois?[-_]?label|amenity|shop|place[-_]?of/i;
+    let styleLabelLayers  = [];   // kaikki tyylin tekstitasot
+    let styleFirstLabelId = null; // ensimmäinen tekstitaso -> omien tasojen beforeId
+    let _lastLabelOpacity = null;
+
+    function scanStyleLayers(){
+      styleLabelLayers = []; styleFirstLabelId = null; _lastLabelOpacity = null;
+      let layers = [];
+      try { layers = (map.getStyle() && map.getStyle().layers) || []; } catch(e){ return; }
+      const poiHits = [];
+      for (const l of layers) {
+        if (!l || l.type !== 'symbol') continue;
+        // Omat tasot ohitetaan (näitä ei pitäisi olla olemassa style.loadissa,
+        // mutta varmistetaan)
+        if (typeof l.id === 'string' &&
+            (l.id.indexOf('master-poly') === 0 || l.id === DIM_LAYER ||
+             l.id.indexOf('halli-') === 0 || l.id.indexOf('charging-') === 0)) continue;
+        const hasText = !!(l.layout && l.layout['text-field']);
+        if (hasText && !styleFirstLabelId) styleFirstLabelId = l.id;
+        styleLabelLayers.push(l.id);
+        // Pehmeä siirtymä himmennykselle
+        try { map.setPaintProperty(l.id, 'text-opacity-transition', { duration: FOCUS.ms }); } catch(e){}
+        try { map.setPaintProperty(l.id, 'icon-opacity-transition', { duration: FOCUS.ms }); } catch(e){}
+        // POI-tekstien väri
+        const src = l['source-layer'] || '';
+        if (hasText && (POI_LAYER_TEST.test(l.id) || POI_LAYER_TEST.test(src))) {
+          try { map.setPaintProperty(l.id, 'text-color', POI_LABEL_COLOR); poiHits.push(l.id); } catch(e){}
+        }
+      }
+      console.log('TotalParking: POI-tekstitasot värjätty (' + POI_LABEL_COLOR + '):',
+        poiHits.length ? poiHits.join(', ') : '(ei osumia — säädä POI_LAYER_TEST)');
+    }
+    // Omat aluetasot lisätään tämän tason alle, jolloin tyylin tekstit jäävät
+    // niiden päälle. null = lisätään päällimmäiseksi (kuten ennen).
+    function labelsBeforeId(){
+      return (styleFirstLabelId && map.getLayer(styleFirstLabelId)) ? styleFirstLabelId : undefined;
     }
     function setDim(on){
       if (typeof map === 'undefined' || !map || !map.getLayer(DIM_LAYER)) return;
@@ -9595,6 +9654,19 @@
       // kaikki muu jää taka-alalle.
       set('halli-icons',    'icon-opacity', iconFocusOpacity(focusHalliId));
       set('charging-icons', 'icon-opacity', iconFocusOpacity(focusChargingId));
+      // Tyylin omat tekstit (POI-nimet, kadunnimet, paikannimet) himmenevät
+      // korostustilassa. Ne ovat aluetasojen PÄÄLLÄ, joten himmennysverho ei
+      // yllä niihin — siksi läpinäkyvyys asetetaan tasoille suoraan.
+      // Asetetaan vain kun arvo muuttuu, koska tasoja voi olla kymmeniä.
+      const labelOp = focusActive ? FOCUS.dimPoi : 1;
+      if (labelOp !== _lastLabelOpacity) {
+        _lastLabelOpacity = labelOp;
+        styleLabelLayers.forEach(id => {
+          if (!map.getLayer(id)) return;
+          try { map.setPaintProperty(id, 'text-opacity', labelOp); } catch(e){}
+          try { map.setPaintProperty(id, 'icon-opacity', labelOp); } catch(e){}
+        });
+      }
       applyTimeAwareColors();   // valitun alueen punainen väri
       setDim(focusActive);
     }
