@@ -4180,6 +4180,13 @@
                teksti on vain varmistus siltä varalta ettei skripti aja. -->
           <div class="about-version" id="about-version">1.0.0</div>
         </div>
+        <!-- Renderöintidiagnostiikka. iPhonen kotivalikkoon asennetussa
+             web-sovelluksessa ei pääse konsoliin, joten nämä arvot näytetään
+             tässä. Päivittyvät aina kun näkymä avataan. -->
+        <div class="settings-item" style="cursor:default; align-items:flex-start;">
+          <div class="settings-item-text"><div class="settings-item-label">Renderöinti</div></div>
+          <div class="about-version" id="about-render" style="text-align:right; white-space:pre-line; line-height:1.45;">—</div>
+        </div>
         <div class="settings-item" onclick="confirmOpenExternal('https://totalparking.fi')">
           <div class="settings-item-text"><div class="settings-item-label">Yrityksen kotisivut</div></div>
           <div class="settings-item-chevron">›</div>
@@ -5588,7 +5595,7 @@
     // siitä näkee heti onko selaimessa uusin tiedosto vai välimuistiin jäänyt
     // vanha versio. Sama arvo tulee myös konsoliin ja window.TP_BUILDiin.
     const APP_VERSION = '1.0.0';
-    const APP_BUILD   = '2026-07-31-d';
+    const APP_BUILD   = '2026-07-31-e';
     window.TP_BUILD = APP_BUILD;
     console.log('BUILD: ' + APP_VERSION + ' · ' + APP_BUILD);
     (function writeAboutVersion(){
@@ -12932,8 +12939,44 @@
       return 'Kiitos viestistä! Otan asian hoitooni. Voisitko tarkentaa hieman, niin osaan auttaa sinua paremmin?';
     }
     
+    // Kerää renderöintitiedot, joilla selviää piirtyykö kartta täydellä
+    // laitetarkkuudella ja saiko WebGL-konteksti MSAA:n. iOS voi evätä
+    // antialiasoinnin tai pienentää piirtopuskuria muistipaineessa, jolloin
+    // kartta näyttää pehmeämmältä kuin työpöydällä.
+    function renderDiagnostics() {
+      const out = [];
+      try {
+        out.push('MapLibre ' + (maplibregl.getVersion ? maplibregl.getVersion() : (maplibregl.version || '?')));
+      } catch(e) { out.push('MapLibre ?'); }
+      const dpr = window.devicePixelRatio || 1;
+      out.push('DPR ' + dpr);
+      try {
+        const c = map.getCanvas();
+        const cssW = c.clientWidth, cssH = c.clientHeight;
+        const bufW = c.width,       bufH = c.height;
+        out.push('CSS ' + cssW + '×' + cssH);
+        out.push('puskuri ' + bufW + '×' + bufH);
+        // Todellinen piirtotarkkuus suhteessa CSS-pikseleihin. Pitäisi olla
+        // sama kuin DPR; pienempi arvo tarkoittaa että kartta renderöityy
+        // alle laitteen tarkkuuden -> pehmeät reunat.
+        const eff = cssW ? (bufW / cssW) : 0;
+        out.push('tehollinen ' + (Math.round(eff * 100) / 100) +
+                 (Math.abs(eff - dpr) > 0.05 ? '  ← ALLE DPR:n' : '  ok'));
+        const gl = c.getContext('webgl2') || c.getContext('webgl');
+        const attrs = gl && gl.getContextAttributes ? gl.getContextAttributes() : null;
+        out.push('MSAA ' + (attrs ? (attrs.antialias ? 'päällä' : 'EI KÄYTÖSSÄ') : '?'));
+      } catch(e) { out.push('canvas ?'); }
+      try {
+        const st = map.getStyle();
+        out.push('tyyli: ' + (st && st.name ? st.name : '—') + ', ' +
+                 ((st && st.layers) ? st.layers.length : '?') + ' tasoa');
+      } catch(e){}
+      return out.join('\n');
+    }
     function openAboutSettings() {
       document.getElementById('about-detail').classList.add('open');
+      const el = document.getElementById('about-render');
+      if (el) { try { el.textContent = renderDiagnostics(); } catch(e){ el.textContent = 'ei saatavilla'; } }
     }
     function closeAboutSettings() {
       document.getElementById('about-detail').classList.remove('open');
