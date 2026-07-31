@@ -5595,7 +5595,7 @@
     // siitä näkee heti onko selaimessa uusin tiedosto vai välimuistiin jäänyt
     // vanha versio. Sama arvo tulee myös konsoliin ja window.TP_BUILDiin.
     const APP_VERSION = '1.0.0';
-    const APP_BUILD   = '2026-07-31-e';
+    const APP_BUILD   = '2026-07-31-f';
     window.TP_BUILD = APP_BUILD;
     console.log('BUILD: ' + APP_VERSION + ' · ' + APP_BUILD);
     (function writeAboutVersion(){
@@ -6122,6 +6122,10 @@
     //
     // Tiedostonimissä on välilyönti ja sulkeet. Ne kelpaavat sellaisenaan,
     // mutta URL koodataan varmuuden vuoksi encodeURI:lla (välilyönti -> %20).
+    // Ylinäytteistyskerroin (SSAA). Ks. perustelu pääkartan pixelRatio-kohdasta.
+    // 1 = pois päältä, 1.5 = nykyinen, 2 = raskain ja tasaisin.
+    const MAP_SSAA = 1.5;
+
     const MAP_STYLE_URLS = {
       kirkas: 'omakartta_style (kirkas).json',
       tumma:  'omakartta_style (tumma).json',
@@ -6151,12 +6155,20 @@
       minZoom: 5, maxZoom: 20,
       pitch: 0, maxPitch: 0, bearing: 0,
       transformRequest, maxTileCacheSize: 50, fadeDuration: 100,
-      // MSAA päälle. MapLibre GL JS:n oletus on false (suorituskykysyistä), kun
-      // taas MapLibre Native piirtää tyypillisesti MSAA:n kanssa. Tämä on se
-      // renderöijätason ero joka näkyy vinojen reunojen — esimerkiksi
-      // rakennusten kulmien — pehmeytenä selaimessa. Jos ruudunpäivitys
-      // kärsii vanhoilla laitteilla, tämän voi ottaa pois.
+      // MSAA pyydetään, mutta iOS:n WebKit EI myönnä sitä (todettu laitteella:
+      // gl.getContextAttributes().antialias === false). Työpöytäselaimissa se
+      // myönnetään. Jätetään pyyntö paikalleen niitä varten.
       antialias: true,
+      // Ylinäytteistys (SSAA) korvaa puuttuvan MSAA:n: piirretään
+      // laitetarkkuutta suuremmalle puskurille ja annetaan selaimen skaalata
+      // se alas näytön kokoon. Skaalaus tasoittaa reunat. Tämä on ainoa
+      // keino saada antialiasointi fill-extrusion-tasoille (esim. HSL-tyylin
+      // building_3d), joilla EI ole omaa varjostinpohjaista antialiasointia
+      // toisin kuin tavallisilla fill- ja line-tasoilla.
+      // Hinta on pikselimäärä MAP_SSAA² eli 1.5 -> 2,25-kertainen täyttöaste.
+      // Jos ruudunpäivitys nykii tai iOS pienentää puskuria (näkyy
+      // Tietoja-näkymän "tehollinen"-rivillä), laske arvoa tai aseta 1.
+      pixelRatio: (window.devicePixelRatio || 1) * MAP_SSAA,
       dragRotate: false, touchPitch: false, pitchWithRotate: false,
       keyboard: false, attributionControl: false, doubleClickZoom: false
     });
@@ -12949,7 +12961,8 @@
         out.push('MapLibre ' + (maplibregl.getVersion ? maplibregl.getVersion() : (maplibregl.version || '?')));
       } catch(e) { out.push('MapLibre ?'); }
       const dpr = window.devicePixelRatio || 1;
-      out.push('DPR ' + dpr);
+      const want = dpr * MAP_SSAA;
+      out.push('DPR ' + dpr + ' · SSAA ' + MAP_SSAA + ' → ' + (Math.round(want*100)/100));
       try {
         const c = map.getCanvas();
         const cssW = c.clientWidth, cssH = c.clientHeight;
@@ -12961,7 +12974,7 @@
         // alle laitteen tarkkuuden -> pehmeät reunat.
         const eff = cssW ? (bufW / cssW) : 0;
         out.push('tehollinen ' + (Math.round(eff * 100) / 100) +
-                 (Math.abs(eff - dpr) > 0.05 ? '  ← ALLE DPR:n' : '  ok'));
+                 (eff < want - 0.05 ? '  ← ALLE PYYDETYN' : '  ok'));
         const gl = c.getContext('webgl2') || c.getContext('webgl');
         const attrs = gl && gl.getContextAttributes ? gl.getContextAttributes() : null;
         out.push('MSAA ' + (attrs ? (attrs.antialias ? 'päällä' : 'EI KÄYTÖSSÄ') : '?'));
@@ -12970,6 +12983,12 @@
         const st = map.getStyle();
         out.push('tyyli: ' + (st && st.name ? st.name : '—') + ', ' +
                  ((st && st.layers) ? st.layers.length : '?') + ' tasoa');
+        // Rakennustasot: fill-extrusion on se joka tarvitsee antialiasoinnin
+        // ulkopuolelta, tavallinen fill antialiasoi itse.
+        const b = ((st && st.layers) || []).filter(l => /building/i.test(l.id));
+        out.push('rakennustasot: ' + (b.length
+          ? b.map(l => l.id + '(' + l.type + ')').join(', ')
+          : 'ei yhtään'));
       } catch(e){}
       return out.join('\n');
     }
