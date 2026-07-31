@@ -348,7 +348,7 @@
       "type": "fill",
       "source": "vector",
       "source-layer": "building",
-      "layout": {"visibility": "visible"},
+      "layout": {"visibility": "none"},
       "paint": {
         "fill-color": "#c2c3cc",
         "fill-outline-color": {"stops": [[13, "#dde1e9"], [17, "#c2c3cc"]]},
